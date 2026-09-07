@@ -9,7 +9,7 @@ Clean up local Codex sessions with `dexcow`. Pick a repo, select sessions, and c
 
 **Prefer the built-in option?** In Codex, archive a session, then open **Settings → Archived chats** to delete it. No extra tool needed.
 
-Use dexcow to select multiple sessions by repo. An [agent skill](docs/usage.md#agent-skill) is also available.
+Use dexcow to delete sessions across several repos in one go. An [agent skill](docs/usage.md#agent-skill) is also available.
 
 ## Demo
 
@@ -30,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/lemonbu5h/codex-cow/main/install.sh
 dexcow
 ```
 
-Press space to select sessions, then enter to review the selected sessions and confirm permanent deletion.
+Press space to select sessions. Enter or Esc returns to repos and keeps your selections. Choose **Review selected** when ready; q quits without deleting.
 
 Run `dexcow help` for commands, or `dexcow archived` to select archived sessions for deletion.
 

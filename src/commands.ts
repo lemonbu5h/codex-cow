@@ -6,84 +6,129 @@ import { listThreads, openDb, type Thread, type ThreadScope } from "./threads.ts
 import {
   formatThreadGroups,
   groupThreadsByProject,
-  type ThreadGroup,
-  projectName,
+  threadGroupLabel,
   relativeTime,
-  shortenCwd,
   truncate,
 } from "./format.ts";
 import { renderRepoOptionLabel } from "./repoOption.ts";
+import * as navigation from "./navigation.ts";
+
+const REVIEW = "review";
 
 export async function runInteractive(scope: ThreadScope = "active"): Promise<void> {
   p.intro(pc.bgMagenta(pc.black(" dexcow ")) + pc.dim(" cow eats Codex sessions"));
 
   const db = openDb();
   try {
-    const threads = await listThreads(db, { scope });
-    if (threads.length === 0) {
-      p.note(scope === "archived" ? "No archived Codex sessions found." : "No Codex sessions found.", "empty");
-      p.outro("nothing to eat 🐄");
+    let previousGroupId: string | undefined;
+    const selectedIds = new Set<string>();
+    while (true) {
+      const threads = await listThreads(db, { scope });
+      if (threads.length === 0) {
+        p.note(scope === "archived" ? "No archived Codex sessions found." : "No Codex sessions found.", "empty");
+        p.outro("nothing to eat 🐄");
+        return;
+      }
+
+      const lockedIds = new Set(findLockedThreadIds(new Set(threads.map((thread) => thread.id))));
+      const availableIds = new Set(threads.filter((thread) => !lockedIds.has(thread.id)).map((thread) => thread.id));
+      let removed = 0;
+      for (const id of selectedIds) {
+        if (!availableIds.has(id)) {
+          selectedIds.delete(id);
+          removed++;
+        }
+      }
+      if (removed > 0) p.note(`${removed} selected session(s) are now locked or unavailable.`, "removed from selection");
+
+      const groups = groupThreadsByProject(threads);
+      const repoOptions = groups.map((group) => {
+        const count = group.threads.filter((thread) => selectedIds.has(thread.id)).length;
+        return {
+          value: group.id,
+          label: renderRepoOptionLabel(group, groups, lockedIds) + (count ? pc.cyan(`  ${count} selected`) : ""),
+        };
+      });
+      if (selectedIds.size > 0) repoOptions.push({ value: REVIEW, label: pc.cyan(`Review selected (${selectedIds.size})`) });
+      const target = await navigation.select({
+        message: "Pick a repo",
+        hints: "up/down move | enter open | esc no action | q quit",
+        options: repoOptions,
+        initialValue: repoOptions.some((option) => option.value === previousGroupId) ? previousGroupId : undefined,
+        back: false,
+      });
+      if (target.action === "quit") {
+        exitCleanly("exited; no changes made");
+        return;
+      }
+
+      previousGroupId = target.value;
+      if (target.value !== REVIEW) {
+        const group = groups.find((item) => item.id === target.value)!;
+        const currentLockedIds = new Set(findLockedThreadIds(new Set(group.threads.map((thread) => thread.id))));
+        const lockedThreads = group.threads.filter((thread) => currentLockedIds.has(thread.id));
+        const availableThreads = group.threads.filter((thread) => !currentLockedIds.has(thread.id));
+        if (lockedThreads.length > 0) {
+          p.note(lockedThreads.map(renderLockedLine).join("\n"), "open in Codex; unavailable");
+        }
+        if (availableThreads.length === 0) {
+          const back = await navigation.select({
+            message: "All sessions are locked",
+            hints: "enter/esc back | q quit",
+            options: [{ value: "back", label: "Back to repos" }],
+          });
+          if (back.action === "quit") {
+            exitCleanly("exited; no changes made");
+            return;
+          }
+          continue;
+        }
+
+        const picked = await navigation.multiselect({
+          message: `Pick sessions: ${threadGroupLabel(group, groups)}`,
+          hints: "space select | enter/esc back | q quit",
+          options: availableThreads.map((thread) => ({
+            value: thread.id,
+            label: renderSessionOptionLabel(thread),
+          })),
+          initialValues: availableThreads.filter((thread) => selectedIds.has(thread.id)).map((thread) => thread.id),
+        });
+
+        if (picked.action === "quit") {
+          exitCleanly("exited; no changes made");
+          return;
+        }
+        for (const thread of group.threads) selectedIds.delete(thread.id);
+        for (const id of picked.value) selectedIds.add(id);
+        continue;
+      }
+
+      // Refresh the selected records and locks immediately before showing the combined review.
+      const currentThreads = await listThreads(db, { scope });
+      const reviewLockedIds = new Set(findLockedThreadIds(selectedIds));
+      const chosen = currentThreads.filter((thread) => selectedIds.has(thread.id) && !reviewLockedIds.has(thread.id));
+      if (chosen.length !== selectedIds.size) {
+        p.note("Some selected sessions are now locked or unavailable. Review your selection again.", "selection changed");
+        continue;
+      }
+      if (chosen.length === 0) continue;
+      p.note(formatThreadGroups(chosen), "selected");
+      const confirmed = await navigation.select({
+        message: `Permanently delete ${chosen.length} session(s)?`,
+        hints: "up/down choose | enter confirm | esc back | q quit",
+        options: [{ value: "no", label: "No, go back" }, { value: "yes", label: "Yes, delete" }],
+        initialValue: "no",
+      });
+      if (confirmed.action === "quit") {
+        exitCleanly("exited; no changes made");
+        return;
+      }
+      if (confirmed.action === "back" || confirmed.value !== "yes") continue;
+
+      const result = await purgeThreads(db, chosen, {});
+      p.outro(summarize(result) + refreshNote());
       return;
     }
-
-    const lockedIds = new Set(findLockedThreadIds(new Set(threads.map((thread) => thread.id))));
-    const target = await pickInteractiveGroup(threads, lockedIds);
-    if (p.isCancel(target)) {
-      exitCleanly("exited; no changes made");
-      return;
-    }
-
-    const lockedThreads = target.threads.filter((thread) => lockedIds.has(thread.id));
-    const availableThreads = target.threads.filter((thread) => !lockedIds.has(thread.id));
-    if (lockedThreads.length > 0) {
-      p.note(lockedThreads.map(renderLockedLine).join("\n"), "open in Codex; unavailable");
-    }
-    if (availableThreads.length === 0) {
-      p.outro("close an open task in Codex and try again");
-      return;
-    }
-
-    const picked = await p.multiselect<string>({
-      message: "Pick sessions to delete (space toggles, enter continues, q exits)",
-      options: availableThreads.map((thread) => ({
-        value: thread.id,
-        label: renderSessionOptionLabel(thread),
-      })),
-      maxItems: 12,
-      required: true,
-    });
-
-    if (p.isCancel(picked)) {
-      exitCleanly("exited; no changes made");
-      return;
-    }
-
-    const ids = new Set(picked);
-    let chosen = availableThreads.filter((t) => ids.has(t.id));
-    const newlyLockedIds = new Set(findLockedThreadIds(new Set(chosen.map((thread) => thread.id))));
-    if (newlyLockedIds.size > 0) {
-      const newlyLocked = chosen.filter((thread) => newlyLockedIds.has(thread.id));
-      p.note(newlyLocked.map(renderLockedLine).join("\n"), "opened in Codex; removed from selection");
-      chosen = chosen.filter((thread) => !newlyLockedIds.has(thread.id));
-    }
-    if (chosen.length === 0) {
-      p.outro("no available sessions selected; no changes made");
-      return;
-    }
-    p.note(chosen.map(renderChosenLine).join("\n"), "selected");
-    const confirmed = await p.confirm({
-      message: `permanently delete ${pc.bold(String(chosen.length))} session(s)?`,
-      active: "Yes, delete",
-      inactive: "No, keep",
-      initialValue: false,
-    });
-    if (!confirmed || p.isCancel(confirmed)) {
-      exitCleanly("kept selected session(s); no changes made");
-      return;
-    }
-
-    const result = await purgeThreads(db, chosen, {});
-    p.outro(summarize(result) + refreshNote());
   } finally {
     db.close();
   }
@@ -159,35 +204,12 @@ function exitCleanly(message: string): void {
   p.outro(pc.dim(message));
 }
 
-async function pickInteractiveGroup(
-  threads: Thread[],
-  lockedIds: ReadonlySet<string>,
-): Promise<ThreadGroup | symbol> {
-  const groups = groupThreadsByProject(threads);
-  if (groups.length === 1) return groups[0]!;
-
-  const chosen = await p.select<string>({
-    message: "Pick a repo or unlinked sessions",
-    options: groups.map((group) => ({
-      value: group.id,
-      label: renderRepoOptionLabel(group, groups, lockedIds),
-    })),
-    maxItems: 12,
-  });
-
-  if (p.isCancel(chosen)) return chosen;
-  return groups.find((group) => group.id === chosen) ?? groups[0]!;
-}
-
 function renderSessionOptionLabel(t: Thread): string {
   const age = relativeTime(t.updatedAt).padStart(4);
-  const title = truncate(t.title, 54).padEnd(54);
+  const width = Math.max(8, Math.min(54, (process.stdout.columns || 80) - 26));
+  const title = truncate(t.title, width).padEnd(width);
   const tag = t.archived ? pc.yellow("archived") : pc.green("active  ");
   return `${pc.dim(age)}  ${title}  ${tag}`;
-}
-
-function renderChosenLine(t: Thread): string {
-  return `${projectName(t.cwd)} - ${truncate(t.title, 72)}`;
 }
 
 function renderLockedLine(t: Thread): string {
