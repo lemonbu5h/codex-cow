@@ -1,6 +1,6 @@
 {
   "name": "dexcow",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "description": "A lightweight Bun CLI with an interactive TUI, plus an agent skill for safely cleaning up local Codex sessions.",
   "type": "module",
   "bin": {
