@@ -29,18 +29,24 @@ The bundled agent runner is separate from the interactive CLI/TUI, but both fron
 
 ### Interactive delete
 
-Related files: `src/index.ts`, `src/commands.ts`, `src/purge.ts`, `src/threads.ts`, `src/desktopCatalog.ts`, `src/sessionIndex.ts`, `src/rolloutFiles.ts`, `src/sessionArtifacts.ts`.
+Related files: `src/index.ts`, `src/commands.ts`, `src/navigation.ts`, `src/purge.ts`, `src/threads.ts`, `src/desktopCatalog.ts`, `src/sessionIndex.ts`, `src/rolloutFiles.ts`, `src/sessionArtifacts.ts`.
 
 ```mermaid
 flowchart LR
   A["Open state_5.sqlite"] --> B["Load sessions"]
   B --> C["Mark locked sessions"]
   C --> D["Group active sessions by Git origin"]
-  D --> E["Pick repo + unlocked sessions"]
-  E --> F["Delete session files"]
+  D --> R["Pick repo"]
+  R --> E["Pick unlocked sessions"]
+  E -->|"Enter / Esc: keep selection"| R
+  R -->|"Review selected"| Q["Confirm all selected repos"]
+  Q -->|"No / Esc"| R
+  Q -->|"Yes"| F["Delete session files"]
   F --> H["Purge current stores"]
   H --> G["Summary"]
 ```
+
+Selections are kept by session ID across repo visits. Returning to repos refreshes sessions and locks, removing unavailable selections before review. Esc is ignored in the repo picker; q quits from every screen. Clack core prompts handle input and rendering, with a navigation wrapper to distinguish Back from Quit.
 
 ### Current store layout
 

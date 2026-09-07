@@ -12,7 +12,9 @@ dexcow rm <id...> --yes # permanently delete specific session IDs
 dexcow --version
 ```
 
-In the picker, press space to select sessions, enter to review and confirm, or q to exit. Deletion is permanent.
+Pick a repo and press space to select sessions. Enter or Esc returns to repos and keeps your selections. Repeat for other repos, then choose **Review selected (N)** to confirm one combined deletion.
+
+Esc at confirmation returns to repos with your selections intact. Esc does nothing in the repo view. Press q anywhere to quit without deleting. Key hints appear on each screen. Deletion is permanent.
 
 ## Sessions and Repositories
 

@@ -26,7 +26,7 @@
   <path d="M18 180 V488 H28" class="accent" fill="none"/>
   <polygon points="18,155 27,164 18,173 9,164" fill="#8be9fd"/>
 
-  <text x="64" y="172" class="term fg">Pick a repo</text>
+  <text x="64" y="172" class="term fg">Pick a repo (up/down move, enter opens, q quits)</text>
 
   <circle cx="72" cy="197" r="8" fill="none" stroke="#9a9aa6" stroke-width="3"/>
   <text x="100" y="207" class="term muted">atlas-web</text>

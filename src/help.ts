@@ -13,6 +13,10 @@ ${pc.bold("Usage:")}
   dexcow -h, --help   Show this help
   dexcow -v, --version
 
+Pick sessions across repos, then choose "Review selected" to confirm deletion.
+Space selects; enter/esc returns to repos and keeps selections. q quits.
+Esc at confirmation goes back; Esc in the repo view does nothing.
+
 ${pc.bold("Data source:")}
   ${pc.dim(describeStateDbPath())}
 `;

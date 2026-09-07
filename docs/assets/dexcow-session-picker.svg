@@ -32,7 +32,7 @@
   <text x="58" y="207" class="term muted">codex-notes</text>
   <text x="600" y="207" class="term muted">7 sessions</text>
 
-  <text x="58" y="280" class="term fg">Pick sessions to delete (space toggles, enter continues, q exits)</text>
+  <text x="58" y="280" class="term fg">Pick sessions (space selects, enter/esc back, q quits)</text>
 
   <rect x="60" y="302" width="12" height="12" fill="none" stroke="#8be9fd" stroke-width="3"/>
   <text x="112" y="316" class="term muted">6h</text>
